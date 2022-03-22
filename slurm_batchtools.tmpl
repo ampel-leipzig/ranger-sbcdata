@@ -1,0 +1,26 @@
+#!/bin/bash
+<%
+if (!is.null(resources$log.file))
+  log.file = resources$log.file
+# relative paths are not handled well by Slurm
+log.file = fs::path_expand(log.file)
+
+if (is.null(resources$walltime))
+  resources$walltime = 24 * 3600
+-%>
+
+#SBATCH --job-name=<%= job.name %>
+#SBATCH --output=<%= log.file %>
+#SBATCH --error=<%= log.file %>
+<%= if (!is.null(resources$partition)) sprintf("#SBATCH --partition='%s'", resources$partition) %>
+#SBATCH --ntasks=1
+<%= if (!is.null(resources$ncpu)) sprintf("#SBATCH --cpus-per-task=%d", resources$ncpu) %>
+<%= if (!is.null(resources$mcpu)) sprintf("#SBATCH --mem-per-cpu=%d", resources$mcpu) %>
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=gibbs@uni-greifswald.de
+#SBATCH --time=<%= ceiling(resources$walltime / 60) %>
+
+MODULESPATH="/usr/share/[Mm]odules/init/bash"
+. ${MODULESPATH}
+module load r
+Rscript -e 'batchtools::doJobCollection("<%= uri %>")'
