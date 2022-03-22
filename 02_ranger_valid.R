@@ -80,11 +80,26 @@ lgd <- do.call(
     )
 )
 
-legend(
-    "bottomright",
-    legend = lgd,
-    lwd = lwd, lty = lty, col = col, bty = "n"
-)
+legend("bottomright", legend = lgd, lwd = lwd, lty = lty, col = col, bty = "n")
+dev.off()
+
+## PRC
+prc <- lapply(pred, performance, "prec", "rec")
+pdf("prc.pdf", width = 7, height = 7)
+col <- palette.colors(length(roc))
+lwd <- c(rep(1, length(r)), 2, 2)
+lty <- c(rep(2, length(r)), 1, 1)
+plot(NA, xlim = c(0L, 1L), ylim = c(0.5, 1L), axes = FALSE, ann = FALSE)
+title(main = "PRC", adj = 0L)
+title(ylab = "Precision", adj = 1L)
+title(xlab = "Recall", adj = 1L)
+axis(1, lwd.ticks = 0L, col = "#808080")
+axis(2, lwd.ticks = 0L, col = "#808080")
+for (i in seq(along = prc)) {
+    plot(prc[[i]], col = col[i], lwd = lwd[i], lty = lty[i], add = TRUE)
+}
+
+legend("bottomright", legend = names(prc), lwd = lwd, lty = lty, col = col, bty = "n")
 dev.off()
 
 ## CAL
