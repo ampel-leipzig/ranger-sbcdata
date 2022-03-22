@@ -55,7 +55,7 @@ roc <- lapply(pred, performance, "tpr", "fpr")
 auc <- sapply(pred, function(pp)performance(pp, "auc")@y.values[[1L]])
 
 ## ROC
-pdf("roc.pdf", width = 7, height = 7)
+png("roc.png", width = 1024, height = 1024)
 col <- palette.colors(length(roc))
 lwd <- c(rep(1, length(r)), 2, 2)
 lty <- c(rep(2, length(r)), 1, 1)
@@ -66,9 +66,8 @@ title(xlab = "1 - Specificity", adj = 1L)
 axis(1, lwd.ticks = 0L, col = "#808080")
 axis(2, lwd.ticks = 0L, col = "#808080")
 abline(0L, 1L, col = "#808080", lty = 2L, lwd = 1L)
-for (i in seq(along = roc)) {
+for (i in seq(along = roc))
     plot(roc[[i]], col = col[i], lwd = lwd[i], lty = lty[i], add = TRUE)
-}
 
 lgd <- do.call(
     c,
@@ -79,13 +78,12 @@ lgd <- do.call(
         )
     )
 )
-
 legend("bottomright", legend = lgd, lwd = lwd, lty = lty, col = col, bty = "n")
 dev.off()
 
 ## PRC
 prc <- lapply(pred, performance, "prec", "rec")
-pdf("prc.pdf", width = 7, height = 7)
+png("prc.png", width = 1024, height = 1024)
 col <- palette.colors(length(roc))
 lwd <- c(rep(1, length(r)), 2, 2)
 lty <- c(rep(2, length(r)), 1, 1)
@@ -93,11 +91,11 @@ plot(NA, xlim = c(0L, 1L), ylim = c(0.5, 1L), axes = FALSE, ann = FALSE)
 title(main = "PRC", adj = 0L)
 title(ylab = "Precision", adj = 1L)
 title(xlab = "Recall", adj = 1L)
+abline(h = 0.5, col = "#808080", lty = 2L, lwd = 1L)
 axis(1, lwd.ticks = 0L, col = "#808080")
 axis(2, lwd.ticks = 0L, col = "#808080")
-for (i in seq(along = prc)) {
+for (i in seq(along = prc))
     plot(prc[[i]], col = col[i], lwd = lwd[i], lty = lty[i], add = TRUE)
-}
 
 legend("bottomright", legend = names(prc), lwd = lwd, lty = lty, col = col, bty = "n")
 dev.off()
@@ -136,7 +134,7 @@ cts <- mapply(
 ps <- mapply(groupmean, x = split(p$predicted, p$center), f = cts)
 os <- mapply(groupmean, x = split(p$observed == 2, p$center), f = cts)
 
-pdf("cal.pdf", width = 7, height = 7)
+png("cal.png", width = 1024, height = 1024)
 col <- palette.colors(length(os))
 plot(NA, xlim = c(0L, 1L), ylim = c(0L, 1L), axes = FALSE, ann = FALSE)
 title(main = "Calibration", adj = 0L)
