@@ -63,6 +63,8 @@ plot(NA, xlim = c(0L, 1L), ylim = c(0L, 1L), axes = FALSE, ann = FALSE)
 title(main = "ROC", adj = 0L)
 title(ylab = "Sensitivity", adj = 1L)
 title(xlab = "1 - Specificity", adj = 1L)
+axis(1, lwd.ticks = 0L, col = "#808080")
+axis(2, lwd.ticks = 0L, col = "#808080")
 abline(0L, 1L, col = "#808080", lty = 2L, lwd = 1L)
 for (i in seq(along = roc)) {
     plot(roc[[i]], col = col[i], lwd = lwd[i], lty = lty[i], add = TRUE)
