@@ -153,3 +153,13 @@ legend(
     col = col, pch = 19, bty = "n"
 )
 dev.off()
+
+## hist
+for (cnt in unique(p$center)) {
+    png(paste0("hist-", cnt, ".png"), width = 1024, height = 1024)
+    par(mfrow = c(2, 1))
+    sb <- p[p$center == cnt,]
+    hist(sb$predicted[sb$observed == 1], col = 1)
+    hist(sb$predicted[sb$observed == 2], col = 2)
+    dev.off()
+}
