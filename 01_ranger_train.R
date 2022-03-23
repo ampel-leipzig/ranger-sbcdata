@@ -17,10 +17,10 @@ login <- future::tweak(
 
 resources <- list(
     workers = 32L,
-    partition = c("compute", "batch", "snowball"),
-    ncpu = 12,
+    partition = c("batch", "snowball"),
+    ncpu = 36,
     mcpu = 2L * 1024L,
-    walltime = 4L * 60L * 60L # seconds
+    walltime = 48L * 60L * 60L # seconds
 )
 
 slurm <- future::tweak(
@@ -30,6 +30,7 @@ slurm <- future::tweak(
     resources = resources
 )
 
+login2 <- future::tweak(multicore, workers = 5)
 node <- sequential
 
 hostname <- Sys.info()[["nodename"]]
@@ -51,15 +52,20 @@ ukl <- ukl[!ukl$Excluded,]
 xvar <- c("Age", "Sex", "PLT", "RBC", "WBC", "HGB", "MCV")
 
 searchspace <- expand.grid(
-    mtry = c(2, 3),
-    num.trees = c(500, 1000)
+    mtry = c(2, 3, 4),
+    num.trees = c(500, 750, 1000, 1250)
 )
 
+#searchspace <- expand.grid(
+#    mtry = c(2, 3),
+#    num.trees = c(500, 750)
+#)
+
 ## nested cross validation for hyperparam search
-nouterfolds = 3
-ninnerfolds = 3
+nouterfolds = 5
+ninnerfolds = 5 
 ## number of repeated cross validation in inner loop
-nrepcv = 3
+nrepcv = 10
 
 set.seed(20220317)
 res <- nrcv_ranger(

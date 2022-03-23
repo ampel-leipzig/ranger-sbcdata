@@ -4,7 +4,7 @@ library("ROCR")
 
 source("00_rus_ranger_functions.R")
 
-r <- readRDS("res-3-3-3.RDS")
+r <- readRDS("res-5-5-10.RDS")
 
 hp <- lapply(r, "[[", "selectedparams")
 hp <- do.call(rbind, hp)
