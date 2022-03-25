@@ -1,11 +1,9 @@
 library("sbcdata")
+library("rusranger")
 
 ## parallelisation on HPC
 library("future")
 library("future.batchtools")
-
-## helper functions
-source("00_rus_ranger_functions.R")
 
 ## parallelisation plan
 login <- future::tweak(
@@ -38,7 +36,7 @@ hostname <- Sys.info()[["nodename"]]
 if (hostname == "ape") {
     future::plan(list(login, slurm, node))
 } else if (grepl("login", hostname)) {
-    future::plan(list(slurm, node))
+    future::plan(list(sequential, slurm, node))
 } else {
     ## ranger automatically uses all local cores that's why we don't want
     ## additional parallelisation
@@ -53,23 +51,18 @@ xvar <- c("Age", "Sex", "PLT", "RBC", "WBC", "HGB", "MCV")
 
 searchspace <- expand.grid(
     mtry = c(2, 3, 4),
-    num.trees = c(500, 750, 1000, 1250)
+    num.trees = c(500, 750, 1000, 1250, 1500)
 )
-
-#searchspace <- expand.grid(
-#    mtry = c(2, 3),
-#    num.trees = c(500, 750)
-#)
 
 ## nested cross validation for hyperparam search
 nouterfolds = 5
-ninnerfolds = 5 
+ninnerfolds = 5
 ## number of repeated cross validation in inner loop
 nrepcv = 10
 
-set.seed(20220317)
-res <- nrcv_ranger(
-    x = ukl[, xvar, with = FALSE], y = ifelse(ukl$Diagnosis == "Sepsis", 1, 2),
+set.seed(20220324)
+res <- nrcv_rusranger(
+    x = as.data.frame(ukl[, xvar, with = FALSE]), y = as.numeric(ukl$Diagnosis == "Sepsis"),
     searchspace = searchspace,
     nouterfolds = nouterfolds, ninnerfolds = ninnerfolds, nrepcv = nrepcv
 )

@@ -1,8 +1,6 @@
 library("sbcdata")
-library("ranger")
-library("ROCR")
-
-source("00_rus_ranger_functions.R")
+library("rusranger")
+library("ameld")
 
 r <- readRDS("res-5-5-10.RDS")
 
@@ -19,15 +17,19 @@ umg <- umg[!umg$Excluded,]
 mimic <- exclude_entries(import_mimic("../../inst/intdata/mimic-iv-1.0/"))
 mimic <- mimic[!mimic$Excluded,]
 
+set.seed(20220325)
+uklrandom <- ukl
+uklrandom$Diagnosis <- sample(uklrandom$Diagnosis)
+
 xvar <- c("Age", "Sex", "PLT", "RBC", "WBC", "HGB", "MCV")
 
-set.seed(20220322)
+set.seed(20220324)
 rngr <- do.call(
-    rus_ranger,
+    rusranger,
     c(
         list(
-            x = ukl[, xvar, with = FALSE],
-            y = ifelse(ukl$Diagnosis == "Sepsis", 1, 2)
+            x = as.data.frame(ukl[, xvar, with = FALSE]),
+            y = as.numeric(ukl$Diagnosis == "Sepsis")
         ),
         hp
     )
@@ -43,10 +45,10 @@ pred <- c(
         paste0("UKL", seq_along(r))
     ),
     lapply(
-        list(UMG = umg, MIMIC = mimic),
+        list(UKLrandom = uklrandom, UMG = umg, MIMIC = mimic),
         function(dd) {
-            pred <- predict(rngr, dd[, xvar, with = FALSE])$predictions[, 2L]
-            prediction(pred, ifelse(dd$Diagnosis == "Sepsis", 1, 2))
+            pred <- predict(rngr, as.data.frame(dd[, xvar, with = FALSE]))$predictions[, 2L]
+            prediction(pred, as.numeric(dd$Diagnosis == "Sepsis"))
         }
     )
 )
@@ -57,8 +59,8 @@ auc <- sapply(pred, function(pp)performance(pp, "auc")@y.values[[1L]])
 ## ROC
 png("roc.png", width = 1024, height = 1024)
 col <- palette.colors(length(roc))
-lwd <- c(rep(1, length(r)), 2, 2)
-lty <- c(rep(2, length(r)), 1, 1)
+lwd <- c(rep(1, length(r)), 2, 2, 2)
+lty <- c(rep(2, length(r)), 1, 1, 1)
 plot(NA, xlim = c(0L, 1L), ylim = c(0L, 1L), axes = FALSE, ann = FALSE)
 title(main = "ROC", adj = 0L)
 title(ylab = "Sensitivity", adj = 1L)
@@ -83,34 +85,41 @@ dev.off()
 
 ## PRC
 prc <- lapply(pred, performance, "prec", "rec")
+auc <- sapply(pred, function(pp)performance(pp, "aucpr")@y.values[[1L]])
 png("prc.png", width = 1024, height = 1024)
-col <- palette.colors(length(roc))
-lwd <- c(rep(1, length(r)), 2, 2)
-lty <- c(rep(2, length(r)), 1, 1)
-plot(NA, xlim = c(0L, 1L), ylim = c(0.5, 1L), axes = FALSE, ann = FALSE)
+plot(NA, xlim = c(0L, 1L), ylim = c(0L, 1L), axes = FALSE, ann = FALSE)
 title(main = "PRC", adj = 0L)
 title(ylab = "Precision", adj = 1L)
 title(xlab = "Recall", adj = 1L)
-abline(h = 0.5, col = "#808080", lty = 2L, lwd = 1L)
 axis(1, lwd.ticks = 0L, col = "#808080")
 axis(2, lwd.ticks = 0L, col = "#808080")
 for (i in seq(along = prc))
     plot(prc[[i]], col = col[i], lwd = lwd[i], lty = lty[i], add = TRUE)
 
-legend("bottomright", legend = names(prc), lwd = lwd, lty = lty, col = col, bty = "n")
+lgd <- do.call(
+    c,
+    lapply(
+        seq_along(auc),
+        function(i)parse(text =
+            paste0("AUC[", names(auc)[i], "] == ", format(auc[i], digits = 3))
+        )
+    )
+)
+legend("bottomright", legend = lgd, lwd = lwd, lty = lty, col = col, bty = "n")
 dev.off()
 
 ## CAL
 val <- lapply(
-    list(UMG = umg, MIMIC = mimic),
+    list(UKLrandom = uklrandom, UMG = umg, MIMIC = mimic),
     function(dd)
         data.frame(
-            predicted = predict(rngr, dd[, xvar, with = FALSE])$predictions[, 2L],
-            observed = ifelse(dd$Diagnosis == "Sepsis", 1, 2)
+            predicted = predict(rngr, as.data.frame(dd[, xvar, with = FALSE]))$predictions[, 2L],
+            observed = as.numeric(dd$Diagnosis == "Sepsis")
         )
 )
 val[["UMG"]]$center <- "UMG"
 val[["MIMIC"]]$center <- "MIMIC"
+val[["UKLrandom"]]$center <- "UKLrandom"
 
 val <- do.call(rbind, val)
 
@@ -129,10 +138,15 @@ rownames(p) <- NULL
 m <- 1000
 ctpts <- lapply(split(p$predicted, p$center), cutpoints, n = m)
 cts <- mapply(
-    cut, split(p$predicted, p$center), ctpts, MoreArgs = list(include.lowest = TRUE)
+    cut, split(p$predicted, p$center), ctpts,
+    MoreArgs = list(include.lowest = TRUE), SIMPLIFY = FALSE
 )
-ps <- mapply(groupmean, x = split(p$predicted, p$center), f = cts)
-os <- mapply(groupmean, x = split(p$observed == 2, p$center), f = cts)
+ps <- mapply(
+    groupmean, x = split(p$predicted, p$center), f = cts, SIMPLIFY = FALSE
+)
+os <- mapply(
+    groupmean, x = split(p$observed == 1, p$center), f = cts, SIMPLIFY = FALSE
+)
 
 png("cal.png", width = 1024, height = 1024)
 col <- palette.colors(length(os))
@@ -159,7 +173,7 @@ for (cnt in unique(p$center)) {
     png(paste0("hist-", cnt, ".png"), width = 1024, height = 1024)
     par(mfrow = c(2, 1))
     sb <- p[p$center == cnt,]
-    hist(sb$predicted[sb$observed == 1], col = 1)
-    hist(sb$predicted[sb$observed == 2], col = 2)
+    hist(sb$predicted[sb$observed == 1], col = 1, xlim = c(0, 1))
+    hist(sb$predicted[sb$observed == 0], col = 2, xlim = c(0, 1))
     dev.off()
 }
