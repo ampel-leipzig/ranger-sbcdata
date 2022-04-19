@@ -12,13 +12,24 @@ hp
 
 ukl <- exclude_entries(subset(sbcdata, Center == "Leipzig"))
 ukl <- ukl[!ukl$Excluded,]
+uklt <- subset(ukl, Set == "Training")
+uklv <- subset(ukl, Set == "Validation")
 umg <- exclude_entries(subset(sbcdata, Center == "Greifswald"))
 umg <- umg[!umg$Excluded,]
 mimic <- exclude_entries(import_mimic("../../inst/intdata/mimic-iv-1.0/"))
 mimic <- mimic[!mimic$Excluded,]
 
+## for development subsample for faster runtime
+#set.seed(20220415)
+#nsub <- 1e5
+#ukl <- ukl[sample(nrow(ukl), nsub),]
+#uklt <- uklt[sample(nrow(uklt), nsub),]
+#uklv <- uklv[sample(nrow(uklv), min(c(nsub, nrow(uklv)))),]
+#umg <- umg[sample(nrow(umg), nsub),]
+#mimic <- mimic[sample(nrow(mimic), nsub),]
+
 set.seed(20220325)
-uklrandom <- ukl
+uklrandom <- uklt
 uklrandom$Diagnosis <- sample(uklrandom$Diagnosis)
 
 xvar <- c("Age", "Sex", "PLT", "RBC", "WBC", "HGB", "MCV")
@@ -45,7 +56,10 @@ pred <- c(
         paste0("UKL", seq_along(r))
     ),
     lapply(
-        list(UKLrandom = uklrandom, UMG = umg, MIMIC = mimic),
+        list(
+            UKLvalidation = uklv, UKLrandom = uklrandom,
+            UMG = umg, MIMIC = mimic
+        ),
         function(dd) {
             pred <- predict(rngr, as.data.frame(dd[, xvar, with = FALSE]))$predictions[, 2L]
             prediction(pred, as.numeric(dd$Diagnosis == "Sepsis"))
@@ -59,8 +73,8 @@ auc <- sapply(pred, function(pp)performance(pp, "auc")@y.values[[1L]])
 ## ROC
 png("roc.png", width = 1024, height = 1024)
 col <- palette.colors(length(roc))
-lwd <- c(rep(1, length(r)), 2, 2, 2)
-lty <- c(rep(2, length(r)), 1, 1, 1)
+lwd <- c(rep(1, length(r)), rep(2, length(pred) - length(r)))
+lty <- c(rep(2, length(r)), rep(1, length(pred) - length(r)))
 plot(NA, xlim = c(0L, 1L), ylim = c(0L, 1L), axes = FALSE, ann = FALSE)
 title(main = "ROC", adj = 0L)
 title(ylab = "Sensitivity", adj = 1L)
@@ -110,7 +124,7 @@ dev.off()
 
 ## CAL
 val <- lapply(
-    list(UKLrandom = uklrandom, UMG = umg, MIMIC = mimic),
+    list(UKLvalidation = uklv, UKLrandom = uklrandom, UMG = umg, MIMIC = mimic),
     function(dd)
         data.frame(
             predicted = predict(rngr, as.data.frame(dd[, xvar, with = FALSE]))$predictions[, 2L],
@@ -120,6 +134,7 @@ val <- lapply(
 val[["UMG"]]$center <- "UMG"
 val[["MIMIC"]]$center <- "MIMIC"
 val[["UKLrandom"]]$center <- "UKLrandom"
+val[["UKLvalidation"]]$center <- "UKLvalidation"
 
 val <- do.call(rbind, val)
 
@@ -145,7 +160,7 @@ ps <- mapply(
     groupmean, x = split(p$predicted, p$center), f = cts, SIMPLIFY = FALSE
 )
 os <- mapply(
-    groupmean, x = split(p$observed == 1, p$center), f = cts, SIMPLIFY = FALSE
+    groupmean, x = split(p$observed, p$center), f = cts, SIMPLIFY = FALSE
 )
 
 png("cal.png", width = 1024, height = 1024)
@@ -162,7 +177,7 @@ for (i in seq_along(os))
     lines(ps[[i]], os[[i]], col = col[i], type = "b", pch = 19)
 
 legend(
-    "bottomright",
+    "topleft",
     legend = names(os),
     col = col, pch = 19, bty = "n"
 )
