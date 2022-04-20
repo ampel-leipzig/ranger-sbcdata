@@ -25,10 +25,10 @@ umg$Diagnosis <- as.integer(umg$Diagnosis == "Sepsis")
 mimic$Diagnosis <- as.integer(mimic$Diagnosis == "Sepsis")
 
 set.seed(20220419)
-nsub <- 1e5
-ukl <- ukl[sample(nrow(ukl), nsub),]
-umg <- umg[sample(nrow(umg), nsub),]
-mimic <- mimic[sample(nrow(mimic), nsub),]
+#nsub <- 1e5
+#ukl <- ukl[sample(nrow(ukl), nsub),]
+#umg <- umg[sample(nrow(umg), nsub),]
+#mimic <- mimic[sample(nrow(mimic), nsub),]
 
 train <- subset(ukl, Set == "Training")
 validation <- list(
