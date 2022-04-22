@@ -64,11 +64,11 @@ mtry <- 3
 num.trees <- 1000
 replace <- TRUE # doing bootstrap, shorter runtime, b/c much lower samplesize/samplefraction
 scw <- as.integer(c(0, 1, 2, 4, 10, 20, 50, 100))
-nrep <- 2
+nrep <- 3
 
-auc <- function(fit, x, y) {
-    p <- prediction(predict(fit, as.data.frame(x))$predictions[, 2L], y)
-    performance(p, "auc")@y.values[[1L]]
+auc <- function(p, y) {
+    pred <- prediction(p, y)
+    performance(pred, "auc")@y.values[[1L]]
 }
 
 cut0 <- function(x, breaks) {
@@ -107,6 +107,9 @@ cut0 <- function(x, breaks) {
 }
 
 bplot <- function(p, time, y, breaks, l, main = "", ...) {
+    old.par <- par(mar = c(10, 4, 4, 2) + 0.1, no.readonly = TRUE)
+    on.exit(par(old.par))
+
     col <- c(Control = "#21908C", Sepsis = "#440154")
     bcol <- setNames(paste0(col, "77"), names(col))
     pcol <- setNames(paste0(col, "FF"), names(col))
@@ -116,7 +119,7 @@ bplot <- function(p, time, y, breaks, l, main = "", ...) {
         y = as.factor(ifelse(y, "S", "C"))
     )
     bp <- boxplot(
-        p ~ y + g, data = d, las = 2, col = bcol, border = pcol, pch = NA,
+        p ~ y + g, data = d, las = 2, col = bcol, border = pcol, pch = 20,
         xlab = "", ylab = "", xaxt = "n", yaxt = "n", frame = FALSE,
         ylim = c(0, 1)
     )
@@ -124,13 +127,15 @@ bplot <- function(p, time, y, breaks, l, main = "", ...) {
     title(ylab = "Probability for Sepsis", adj = 1L)
     axis(
         1, lwd.ticks = 0L, col = "#808080",
-        at = seq_len(2 * nlevels(d$g)), labels = bp$names, las = 2
+        at = seq_len(2 * nlevels(d$g)),
+        labels = paste0(bp$names, " (", bp$n, ")"),
+        las = 2
     )
     axis(2, lwd.ticks = 0L, col = "#808080")
-    beeswarm(
-        p ~ y + g, data = d, col = pcol, pch = 20, add = TRUE,
-        cex = 0.75, method = "compactswarm"
-    )
+    #beeswarm(
+    #    p ~ y + g, data = d, col = pcol, pch = 20, add = TRUE,
+    #    cex = 0.75, method = "compactswarm"
+    #)
     abline(l$Control, col = pcol["Control"], lwd = 2, lty = 2)
     abline(l$Sepsis, col = pcol["Sepsis"], lwd = 2, lty = 2)
 }
@@ -201,7 +206,7 @@ dir.create(
 )
 
 # Baseline
-a.baseline <- rowMedians(do.call(cbind, lapply(seq_len(nrep), function(r) {
+a.baseline <- rowMeans(simplify2array(lapply(seq_len(nrep), function(r) {
     d <- copy(train)
     d <- d[!d$Excluded0,]
     rus <- rusranger(
@@ -217,25 +222,28 @@ a.baseline <- rowMedians(do.call(cbind, lapply(seq_len(nrep), function(r) {
             width = 1024, height = 768
         )
         on.exit(dev.off())
-        alpha(
-            predict(
-                rus,
-                as.data.frame(v[, xvar, with = FALSE])
-            )$predictions[, 2L],
-            y = v$Diagnosis, time = v$SecToIcu, breaks = timebreaks,
-            plot = TRUE, main = paste(v$Center[1], "Baseline", r)
-        )$alpha
+        p <- predict(
+            rus, as.data.frame(v[, xvar, with = FALSE])
+        )$predictions[, 2L]
+        c(
+            alpha = alpha(
+                p, y = v$Diagnosis, time = v$SecToIcu, breaks = timebreaks,
+                plot = TRUE, main = paste(v$Center[1], "Baseline", r
+            ))$alpha,
+            auc = auc(p, y = v$Diagnosis)
+        )
     })
-})))
+})), dims = 2L)
 
+train$Diagnosis0 <- train$Diagnosis
 train$Diagnosis <- as.integer(
     train$Diagnosis & sbcdata:::.is_time_range(train, range = c(12, 0) * 3600)
 )
 
-a.scw <- do.call(cbind, lapply(scw, function(i) {
-    rowMedians(do.call(cbind, lapply(seq_len(nrep), function(r) {
+a.scw <- simplify2array(lapply(scw, function(i) {
+    rowMeans(simplify2array(lapply(seq_len(nrep), function(r) {
         rcw <- cwranger(train, scw = i)
-        lapply(validation, function(v) {
+        sapply(validation, function(v) {
             png(
                 file.path(
                     "boxplots", "scw",
@@ -244,57 +252,91 @@ a.scw <- do.call(cbind, lapply(scw, function(i) {
                 width = 1024, height = 768
             )
             on.exit(dev.off())
-            alpha(
-                predict(rcw,
-                    as.data.frame(v[, xvar, with = FALSE])
-                )$prediction[, 2L],
-                y = v$Diagnosis, time = v$SecToIcu, breaks = timebreaks,
-                plot = TRUE, main = paste(v$Center[1], i, r)
-            )$alpha
+            p <- predict(
+                rcw, as.data.frame(v[, xvar, with = FALSE])
+            )$prediction[, 2L]
+            c(
+                alpha = alpha(
+                    p, y = v$Diagnosis, time = v$SecToIcu, breaks = timebreaks,
+                    plot = TRUE, main = paste(v$Center[1], i, r
+                ))$alpha,
+                auc = auc(p, y = v$Diagnosis)
+            )
         })
-    })))
+    })), dims = 2L)
 }))
-colnames(a.scw) <- scw
+dimnames(a.scw)[[3L]] <- scw
 
 knitr::kable(t(a.baseline))
 
-knitr::kable(t(a.scw))
+for (i in names(validation))
+    print(knitr::kable(t(a.scw[, i, ])))
 
 plot_a_trend <- function(baseline, scw, main) {
     col <- palette.colors(2)
+    grd <- c(5, 10, 20, 50, 100)
 
-    ylim <- range(c(baseline, scw))
-    xscw <- as.numeric(names(scw))
+    old.par <- par(mfrow = c(2, 1))
+    on.exit(par(old.par))
 
+    ## alpha
+    ylim <- range(c(baseline["alpha"], scw["alpha",]))
+    xscw <- as.numeric(colnames(scw))
+
+    par(mar = c(0, 4, 4, 2) + 0.1)
     plot(
         NA,
         xlim = c(0L, max(xscw)), ylim = ylim,
         axes = FALSE, ann = FALSE
     )
-    title(main = main, adj = 0L)
+    title(main = paste(main, "alpha trend"), adj = 0L)
+    title(ylab = "alpha", adj = 1L)
+    title(xlab = "SCW", adj = 1L)
+    axis(2, lwd.ticks = 0L, col = "#808080")
+    abline(v = grd, lwd = 0.75, col = "lightgray", lty = "dotted")
+
+    abline(h = baseline["alpha"], col = col[1])
+
+    lines(xscw, scw["alpha",], col = col[2], type = "b", pch = 20)
+
+    legend(
+        "bottomright",
+        legend = c("RUS 6-72", "SCW"),
+        col = col,
+        lwd = 1,
+        bty = "n"
+    )
+
+    ## auc
+    par(mar = c(5, 4, 2, 2) + 0.1)
+    plot(
+        NA,
+        xlim = c(0L, max(xscw)), ylim = c(0.5, 1),
+        axes = FALSE, ann = FALSE
+    )
+    title(main = paste(main, "AUC trend"), adj = 0L)
     title(ylab = "AUC", adj = 1L)
     title(xlab = "SCW", adj = 1L)
     axis(1, lwd.ticks = 0L, col = "#808080")
     axis(2, lwd.ticks = 0L, col = "#808080")
+    abline(v = grd, lwd = 0.75, col = "lightgray", lty = "dotted")
     abline(h = 0.5, lty = "dashed", col = "#808080")
 
-    abline(h = baseline, col = col[1:2])
+    abline(h = baseline["auc"], col = col[1])
 
-    lines(xscw, scw, col = col[2])
+    lines(xscw, scw["auc",], col = col[2], type = "b", pch = 20)
 
     legend(
         "bottomright",
-        legend = c("RUS", "SCW"),
+        legend = c("RUS 6-72", "SCW"),
         col = col,
         lwd = 1,
         bty = "n"
     )
 }
 
-for (nm in names(a.baseline)) {
+for (nm in colnames(a.baseline)) {
     png(paste0("alpha-scw-trend_", nm, ".png"), width = 1024, height = 1024)
-    plot_a_trend(
-        a.baseline[nm], a.scw[nm,], main = paste(nm, "alpha trend")
-    )
+    plot_a_trend(a.baseline[,nm], a.scw[,nm,], main = nm)
     dev.off()
 }
